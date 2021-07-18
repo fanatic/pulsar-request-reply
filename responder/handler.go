@@ -33,10 +33,9 @@ func HandleResponses(ctx context.Context, client pulsar.Client, service string, 
 		r.consumer.Consumer().Ack(msg)
 
 		// Produce response
-
 		p, err := common.NewProducer(ctx, client, service+"."+msg.Properties()["replyTo"])
 		if err != nil {
-			log.Fatal("Could not instantiate Pulsar producer: %v", err)
+			log.Fatalf("Could not instantiate Pulsar producer: %v", err)
 		}
 
 		p.Produce(ctx, reply, nil)
