@@ -24,19 +24,16 @@ func main() {
 	ctx := context.Background()
 
 	// Setup Response Handler (server-side)
-	go responder.HandleResponses(ctx, client, "echo-service", func(body []byte) ([]byte, error) {
-		defer timing.New("server").Start().Stop()
-
-		return []byte(fmt.Sprintf("Received: %s", body)), nil
-	})
+	go responder.HandleResponses(ctx, client, "echo-service", helloHandler)
 
 	// Make our test requests (client-side)
 	for i := 10; i >= 0; i-- {
-		hello(ctx, client, fmt.Sprintf("hello delay:%d", i))
+		hello(ctx, client, "hello")
 	}
 
-	timing.Results()
+	asyncHello(ctx, client, "hello")
 
+	timing.Results()
 }
 
 func hello(ctx context.Context, client pulsar.Client, payload string) {
@@ -47,4 +44,28 @@ func hello(ctx context.Context, client pulsar.Client, payload string) {
 		log.Fatalf("Request failed: %v", err)
 	}
 	log.Printf("Received reply: %s", reply)
+}
+
+func helloHandler(payload []byte) ([]byte, error) {
+	defer timing.New("rtt").Start().Stop()
+
+	return []byte(fmt.Sprintf("Received: %s", payload)), nil
+}
+
+func asyncHello(ctx context.Context, client pulsar.Client, payload string) {
+	defer timing.New("async-rtt").Start().Stop()
+
+	reply := make(chan []byte)
+	n := 100
+
+	for i := 0; i < n; i++ {
+		err := lib.AsyncRequest(ctx, client, "echo-service", []byte(payload), reply)
+		if err != nil {
+			log.Fatalf("Request failed: %v", err)
+		}
+	}
+
+	for i := 0; i < n; i++ {
+		log.Printf("Received reply: %s", <-reply)
+	}
 }

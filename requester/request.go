@@ -2,6 +2,7 @@ package requester
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/apache/pulsar-client-go/pulsar"
@@ -28,4 +29,31 @@ func Request(ctx context.Context, client pulsar.Client, service string, payload 
 	r.consumer.Consumer().Ack(msg)
 
 	return msg.Payload(), nil
+}
+
+func AsyncRequest(ctx context.Context, client pulsar.Client, service string, payload []byte, reply chan []byte) error {
+	requestID := uuid.NewString()
+
+	r, err := New(ctx, client, service, requestID)
+	if err != nil {
+		return fmt.Errorf("Could not instantiate requester: %w", err)
+	}
+
+	// Produce request (asynchronously)
+	r.producer.Produce(ctx, payload, map[string]string{"replyTo": "reply-" + requestID})
+
+	// Consume response
+	go func() {
+		msg, err := r.consumer.Consumer().Receive(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		r.consumer.Consumer().Ack(msg)
+
+		reply <- msg.Payload()
+
+		r.Close()
+	}()
+
+	return nil
 }
